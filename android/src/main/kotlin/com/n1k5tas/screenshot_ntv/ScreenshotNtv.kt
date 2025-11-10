@@ -20,25 +20,31 @@ class ScreenshotNtv : ScreenshotNtvApi {
         val window = activity.window
         val view = window.decorView.rootView
 
-        val surfaceView = getSurfaceView(view) ?: return
-
-        val surface = surfaceView.holder.surface
-
-        if(!surface.isValid) return
-
         val bitmap: Bitmap
 
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
-            bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            val width = view.width.takeIf { it > 0 } ?: window.decorView.width
+            val height = view.height.takeIf { it > 0 } ?: window.decorView.height
 
-            PixelCopy.request(surfaceView, bitmap, {copyResult ->
-                if(copyResult == PixelCopy.SUCCESS){
+            if (width <= 0 || height <= 0) {
+                Log.e("ScreenshotNtv", "Window has invalid size: $width x $height")
+                return
+            }
+
+            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+            try {
+                PixelCopy.request(window, bitmap, { copyResult ->
+                    if(copyResult == PixelCopy.SUCCESS){
+                        bitmapToByteArray(bitmap)
+                    } else {
+                        Log.e("ScreenshotNtv", "PixelCopy failed with code $copyResult")
+                    }
+                }, Handler(Looper.getMainLooper()))
+            } catch (e: IllegalArgumentException) {
+                Log.e("ScreenshotNtv", "PixelCopy threw IllegalArgumentException", e)
                     bitmapToByteArray(bitmap)
                 }
-            }, Handler(Looper.getMainLooper()))
-
-
-
         }
         else{
             bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.RGB_565)
