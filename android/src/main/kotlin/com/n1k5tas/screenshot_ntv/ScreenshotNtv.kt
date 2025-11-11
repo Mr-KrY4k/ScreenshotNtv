@@ -12,6 +12,7 @@ import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import java.io.ByteArrayOutputStream
 
 
@@ -27,39 +28,29 @@ class ScreenshotNtv : ScreenshotNtvApi {
         val window = activity.window
         val view = window.decorView.rootView
 
-        val bitmap: Bitmap
-
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
-            val width = view.width.takeIf { it > 0 } ?: window.decorView.width
-            val height = view.height.takeIf { it > 0 } ?: window.decorView.height
+            val windowWidth = view.width.takeIf { it > 0 } ?: window.decorView.width
+            val windowHeight = view.height.takeIf { it > 0 } ?: window.decorView.height
 
-            if (width <= 0 || height <= 0) {
-                Log.e("ScreenshotNtv", "Window has invalid size: $width x $height")
+            if (windowWidth <= 0 || windowHeight <= 0) {
+                Log.e("ScreenshotNtv", "Window has invalid size: $windowWidth x $windowHeight")
                 return
             }
 
-            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val surfaceView = getSurfaceView(view)
 
-            try {
-                PixelCopy.request(window, bitmap, { copyResult ->
-                    if(copyResult == PixelCopy.SUCCESS){
-                        deliverBitmap(bitmap)
-                    } else {
-                        Log.e("ScreenshotNtv", "PixelCopy failed with code $copyResult")
-                        bitmap.recycle()
-                    }
-                }, pixelCopyHandler)
-            } catch (e: IllegalArgumentException) {
-                Log.e("ScreenshotNtv", "PixelCopy threw IllegalArgumentException", e)
-                deliverBitmap(bitmap)
+            if (surfaceView != null && surfaceView.holder.surface.isValid) {
+                val surfaceWidth = surfaceView.width.takeIf { it > 0 } ?: windowWidth
+                val surfaceHeight = surfaceView.height.takeIf { it > 0 } ?: windowHeight
+
+                captureSurface(surfaceView, surfaceWidth, surfaceHeight) {
+                    captureWindow(window, windowWidth, windowHeight)
                 }
-        }
-        else{
-            bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.RGB_565)
-            val canvas = Canvas(bitmap)
-            view.draw(canvas)
-            canvas.setBitmap(null)
-            deliverBitmap(bitmap)
+            } else {
+                captureWindow(window, windowWidth, windowHeight)
+            }
+        } else {
+            manualCapture(view)
         }
     }
 
@@ -78,6 +69,61 @@ class ScreenshotNtv : ScreenshotNtvApi {
                 traverseView(view.getChildAt(i), callback)
             }
         }
+    }
+
+    private fun captureSurface(surfaceView: SurfaceView, width: Int, height: Int, fallback: () -> Unit) {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+        try {
+            PixelCopy.request(surfaceView, bitmap, { copyResult ->
+                if(copyResult == PixelCopy.SUCCESS){
+                    deliverBitmap(bitmap)
+                } else {
+                    Log.e("ScreenshotNtv", "PixelCopy surface failed with code $copyResult")
+                    bitmap.recycle()
+                    fallback()
+                }
+            }, pixelCopyHandler)
+        } catch (e: IllegalArgumentException) {
+            Log.e("ScreenshotNtv", "PixelCopy surface threw IllegalArgumentException", e)
+            bitmap.recycle()
+            fallback()
+        }
+    }
+
+    private fun captureWindow(window: Window, width: Int, height: Int) {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+        try {
+            PixelCopy.request(window, bitmap, { copyResult ->
+                if(copyResult == PixelCopy.SUCCESS){
+                    deliverBitmap(bitmap)
+                } else {
+                    Log.e("ScreenshotNtv", "PixelCopy window failed with code $copyResult")
+                    bitmap.recycle()
+                    manualCapture(window.decorView.rootView)
+                }
+            }, pixelCopyHandler)
+        } catch (e: IllegalArgumentException) {
+            Log.e("ScreenshotNtv", "PixelCopy window threw IllegalArgumentException", e)
+            bitmap.recycle()
+            manualCapture(window.decorView.rootView)
+        }
+    }
+
+    private fun manualCapture(view: View) {
+        val width = view.width
+        val height = view.height
+        if (width <= 0 || height <= 0) {
+            Log.e("ScreenshotNtv", "manualCapture: invalid size $width x $height")
+            return
+        }
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        view.draw(canvas)
+        canvas.setBitmap(null)
+        deliverBitmap(bitmap)
     }
 
     private fun deliverBitmap(bitmap: Bitmap) {

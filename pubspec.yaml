@@ -1,6 +1,6 @@
 name: screenshot_ntv
 description: A Flutter plugin to take(support Platform Views) for Android and iOS with native code.
-version: 1.0.4
+version: 1.0.5
 homepage: https://github.com/n1kStas/ScreenshotNtv
 
 environment:

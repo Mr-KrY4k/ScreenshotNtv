@@ -1,3 +1,7 @@
+## 1.0.5
+
+* enhance screenshot handling in ScreenshotNtv with improved surface and window capture methods
+
 ## 1.0.4
 
 * release
