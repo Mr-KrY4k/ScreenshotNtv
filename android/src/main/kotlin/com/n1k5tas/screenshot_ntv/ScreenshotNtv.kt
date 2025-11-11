@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
 import android.view.PixelCopy
@@ -15,6 +16,12 @@ import java.io.ByteArrayOutputStream
 
 
 class ScreenshotNtv : ScreenshotNtvApi {
+    private val pixelCopyThread = HandlerThread("ScreenshotPixelCopy").apply { start() }
+    private val pixelCopyHandler = Handler(pixelCopyThread.looper)
+    private val compressionThread = HandlerThread("ScreenshotCompression").apply { start() }
+    private val compressionHandler = Handler(compressionThread.looper)
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     override fun takeScreenshot() {
         val activity = ScreenshotNtvPlugin.currentActivity ?: return
         val window = activity.window
@@ -36,14 +43,15 @@ class ScreenshotNtv : ScreenshotNtvApi {
             try {
                 PixelCopy.request(window, bitmap, { copyResult ->
                     if(copyResult == PixelCopy.SUCCESS){
-                        bitmapToByteArray(bitmap)
+                        deliverBitmap(bitmap)
                     } else {
                         Log.e("ScreenshotNtv", "PixelCopy failed with code $copyResult")
+                        bitmap.recycle()
                     }
-                }, Handler(Looper.getMainLooper()))
+                }, pixelCopyHandler)
             } catch (e: IllegalArgumentException) {
                 Log.e("ScreenshotNtv", "PixelCopy threw IllegalArgumentException", e)
-                    bitmapToByteArray(bitmap)
+                deliverBitmap(bitmap)
                 }
         }
         else{
@@ -51,9 +59,7 @@ class ScreenshotNtv : ScreenshotNtvApi {
             val canvas = Canvas(bitmap)
             view.draw(canvas)
             canvas.setBitmap(null)
-            val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-            bitmapToByteArray(bitmap)
+            deliverBitmap(bitmap)
         }
     }
 
@@ -74,9 +80,24 @@ class ScreenshotNtv : ScreenshotNtvApi {
         }
     }
 
-    private fun bitmapToByteArray(bitmap: Bitmap) {
+    private fun deliverBitmap(bitmap: Bitmap) {
+        compressionHandler.post {
+            val byteArray = bitmapToByteArray(bitmap)
+            bitmap.recycle()
+            mainHandler.post {
+                ScreenshotNtvPlugin.screenshotNtvFlutterListener.takeResultScreenshot(byteArray) {}
+            }
+        }
+    }
+
+    private fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-        ScreenshotNtvPlugin.screenshotNtvFlutterListener.takeResultScreenshot(stream.toByteArray()) {}
+        return stream.toByteArray()
+    }
+
+    fun dispose() {
+        pixelCopyThread.quitSafely()
+        compressionThread.quitSafely()
     }
 }

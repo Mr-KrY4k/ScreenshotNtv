@@ -21,19 +21,23 @@ class ScreenshotNtvPlugin: FlutterPlugin, ActivityAware, ActivityLifecycleCallba
     lateinit var screenshotNtvFlutterListener: ScreenshotNtvFlutterListener
   }
 
+  private var api: ScreenshotNtv? = null
+
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     val context = binding.getApplicationContext();
     if (context is Application) {
       val application = context as Application
       application.registerActivityLifecycleCallbacks(this)
     }
-    val api = ScreenshotNtv()
-    ScreenshotNtvApi.setUp(binding.getBinaryMessenger(), api)
+    val screenshotApi = ScreenshotNtv()
+    ScreenshotNtvApi.setUp(binding.getBinaryMessenger(), screenshotApi)
+    api = screenshotApi
     screenshotNtvFlutterListener = ScreenshotNtvFlutterListener(binding.getBinaryMessenger())
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-
+    api?.dispose()
+    api = null
   }
 
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
