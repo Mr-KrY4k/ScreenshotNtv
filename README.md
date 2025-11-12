@@ -8,7 +8,7 @@ It's a workaround for the issue [RepaintBoundary can't take screenshot of Platfo
 
 ``` yaml
 dependencies:
-  screenshot_ntv: ^1.0.4
+  screenshot_ntv: ^1.0.5
 ```
 
 ## Take Screenshot
