@@ -22,6 +22,8 @@ class ScreenshotNtv : ScreenshotNtvApi {
     private val compressionThread = HandlerThread("ScreenshotCompression").apply { start() }
     private val compressionHandler = Handler(compressionThread.looper)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val manualCaptureThread = HandlerThread("ScreenshotManualCapture").apply { start() }
+    private val manualCaptureHandler = Handler(manualCaptureThread.looper)
 
     override fun takeScreenshot() {
         val activity = ScreenshotNtvPlugin.currentActivity ?: return
@@ -112,6 +114,17 @@ class ScreenshotNtv : ScreenshotNtvApi {
     }
 
     private fun manualCapture(view: View) {
+        manualCaptureHandler.post {
+            manualCaptureOnMain(view)
+        }
+    }
+
+    private fun manualCaptureOnMain(view: View) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { manualCaptureOnMain(view) }
+            return
+        }
+
         val width = view.width
         val height = view.height
         if (width <= 0 || height <= 0) {
@@ -145,5 +158,6 @@ class ScreenshotNtv : ScreenshotNtvApi {
     fun dispose() {
         pixelCopyThread.quitSafely()
         compressionThread.quitSafely()
+        manualCaptureThread.quitSafely()
     }
 }
